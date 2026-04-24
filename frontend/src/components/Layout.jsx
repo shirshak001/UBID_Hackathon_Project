@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, ListChecks, Search, Building2 } from 'lucide-react';
+import { LayoutDashboard, ListChecks, Search, Building2, FileWarning } from 'lucide-react';
 
 const Layout = () => {
   return (
@@ -19,6 +19,7 @@ const Layout = () => {
         <nav className="flex-1 p-4 space-y-2">
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Dashboard" />
           <NavItem to="/review" icon={<ListChecks size={20} />} label="Review Queue" />
+          <NavItem to="/unmatched" icon={<FileWarning size={20} />} label="Unmatched Events" />
           <NavItem to="/search" icon={<Search size={20} />} label="Search Directory" />
         </nav>
 

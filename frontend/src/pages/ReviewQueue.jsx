@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AlertCircle } from 'lucide-react';
 
 export default function ReviewQueue() {
   const [pairs, setPairs] = useState([]);
@@ -21,7 +22,7 @@ export default function ReviewQueue() {
     fetchPairs();
   }, []);
 
-  const handleAction = async (pairId, action) => {
+  const handleAction = async (pairId, action, notes) => {
     // Optimistic UI update
     setPairs(prev => prev.filter(p => p.id !== pairId));
     
@@ -29,12 +30,10 @@ export default function ReviewQueue() {
       await fetch(`http://localhost:3000/api/pairs/${pairId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, notes }) // Now sending notes for ML feedback loop
       });
     } catch (e) {
       console.error(e);
-      // If error, we should ideally revert the optimistic update, 
-      // but for hackathon prototype, we can just refetch
       fetchPairs();
     }
   };
@@ -50,8 +49,8 @@ export default function ReviewQueue() {
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
       <div>
-        <h2 className="text-3xl font-extrabold text-slate-800">Human-in-the-Loop Review Queue</h2>
-        <p className="text-slate-500 mt-1">Review ambiguous matches identified by the ML engine to generate UBIDs.</p>
+        <h2 className="text-3xl font-extrabold text-slate-800">Reviewer Workbench</h2>
+        <p className="text-slate-500 mt-1">Human-in-the-loop resolution. Your decisions and notes directly train the entity resolution engine.</p>
       </div>
 
       {pairs.length === 0 ? (
@@ -88,39 +87,47 @@ export default function ReviewQueue() {
 }
 
 function ReviewCard({ pair, onAction }) {
+  const [notes, setNotes] = useState('');
   const scorePercent = Math.round(pair.score * 100);
   
   // Determine color based on score
-  let scoreColor = 'text-amber-500 bg-amber-50';
-  if (scorePercent >= 80) scoreColor = 'text-emerald-600 bg-emerald-50';
-  else if (scorePercent < 50) scoreColor = 'text-rose-600 bg-rose-50';
+  let scoreColor = 'text-amber-500 bg-amber-50 border-amber-200';
+  if (scorePercent >= 80) scoreColor = 'text-emerald-600 bg-emerald-50 border-emerald-200';
+  else if (scorePercent < 50) scoreColor = 'text-rose-600 bg-rose-50 border-rose-200';
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
-          <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center border border-white shadow-sm ${scoreColor}`}>
+          <div className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center border shadow-sm ${scoreColor}`}>
             <span className="text-xs font-bold uppercase tracking-wide opacity-80">Score</span>
             <span className="text-xl font-black">{scorePercent}%</span>
           </div>
           <div>
-            <h3 className="font-bold text-slate-800">Entity Resolution Match</h3>
-            <p className="text-sm text-slate-500">ID: {pair.id}</p>
+            <h3 className="font-bold text-slate-800 text-lg">Entity Resolution Match</h3>
+            <p className="text-sm text-slate-500 font-mono mt-0.5">ID: {pair.id}</p>
           </div>
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={() => onAction(pair.id, 'reject')}
-            className="px-6 py-3 bg-white border-2 border-rose-100 text-rose-600 rounded-xl font-bold hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95"
+            onClick={() => onAction(pair.id, 'flag', notes)}
+            className="px-4 py-3 bg-white border border-amber-200 text-amber-600 rounded-xl font-bold hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2"
+            title="Send back for more info"
           >
-            ❌ Reject Match
+            <AlertCircle size={18} /> Flag
           </button>
           <button 
-            onClick={() => onAction(pair.id, 'merge')}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/40 hover:-translate-y-0.5 transition-all active:scale-95"
+            onClick={() => onAction(pair.id, 'reject', notes)}
+            className="px-6 py-3 bg-white border-2 border-rose-100 text-rose-600 rounded-xl font-bold hover:bg-rose-50 hover:border-rose-200 transition-all active:scale-95"
           >
-            ✅ Confirm Merge
+            ❌ Reject
+          </button>
+          <button 
+            onClick={() => onAction(pair.id, 'merge', notes)}
+            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 hover:shadow-lg hover:shadow-blue-500/40 hover:-translate-y-0.5 transition-all active:scale-95"
+          >
+            ✅ Merge
           </button>
         </div>
       </div>
@@ -147,6 +154,19 @@ function ReviewCard({ pair, onAction }) {
       <div className="flex divide-x divide-slate-100">
         <Record source={pair.record_a} matchDetails={pair.features} isPrimary />
         <Record source={pair.record_b} matchDetails={pair.features} />
+      </div>
+
+      {/* Reviewer Feedback Loop */}
+      <div className="bg-slate-50 p-6 border-t border-slate-200 flex gap-4">
+        <div className="flex-1">
+           <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Reviewer Notes / Feedback (Optional)</label>
+           <textarea 
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Explain your decision to help train the ML model (e.g., 'Address is completely different despite similar name')..."
+              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none h-20"
+           />
+        </div>
       </div>
     </div>
   );
